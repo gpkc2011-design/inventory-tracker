@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Café Stock Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F6F8;
+    --surface: #FFFFFF;
+    --surface-2: #F9FAFB;
+    --border: #E4E7EC;
+    --border-strong: #D0D5DD;
+    --text: #1B2130;
+    --muted: #667085;
+    --faint: #98A2B3;
+    --accent: #EA580C;
+    --accent-hover: #C2410C;
+    --accent-soft: #FFF1E8;
+    --accent-border: #FDCDAE;
+    --ok: #3F7D5C;
+    --danger: #B42318;
+    --shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12151C; --surface: #1A1F29; --surface-2: #202634; --border: #2B3240; --border-strong: #3A4253;
+      --text: #E8EBF0; --muted: #A0A8B8; --faint: #6B7385;
+      --accent: #F26B1D; --accent-hover: #FF8540; --accent-soft: #3A2316; --accent-border: #6B3A1E;
+      --ok: #7CC29B; --danger: #F97066; --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 17px; line-height: 1.5;
+  }
+  button, input { font: inherit; color: inherit; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 24px 64px; }
+
+  /* Header */
+  header.top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0; font-weight: 700; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); margin: 4px 0 0; font-size: 16px; }
+  .top-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid var(--border-strong);
+    background: var(--surface); font-weight: 600; font-size: 16px; cursor: pointer;
+    transition: background .15s, border-color .15s, opacity .15s;
+  }
+  .btn:hover:not(:disabled) { background: var(--surface-2); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+  .btn.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+  .btn:focus-visible, .chip:focus-visible, .tab:focus-visible, .step:focus-visible, .kpi:focus-visible { outline: 3px solid var(--accent-border); outline-offset: 2px; }
+
+  /* KPI cards */
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .kpi {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 18px 20px; text-align: left; cursor: pointer;
+    transition: border-color .15s;
+  }
+  .kpi:hover { border-color: var(--border-strong); }
+  .kpi.active { border-color: var(--accent); }
+  .kpi .label { color: var(--muted); font-size: 15px; font-weight: 500; }
+  .kpi .value { font-size: 36px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .kpi .value small { font-size: 16px; color: var(--muted); font-weight: 500; letter-spacing: 0; margin-left: 6px; }
+  .kpi .foot { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  .kpi .value.warn { color: var(--accent); }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    flex: none; background: none; border: 0; padding: 12px 16px; font-size: 17px; font-weight: 600;
+    color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+  .pill { font-size: 13px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
+  .tab[aria-selected="true"] .pill.hot, .pill.hot { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
+
+  /* Toolbar */
+  .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--border); background: var(--surface); border-radius: 999px;
+    padding: 7px 14px; font-size: 15px; font-weight: 500; cursor: pointer; color: var(--muted);
+  }
+  .chip:hover { border-color: var(--border-strong); color: var(--text); }
+  .chip[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--surface); }
+  .toolbar-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 15px; cursor: pointer; user-select: none; }
+  .toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+  /* Item cards */
+  .group-title { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin: 26px 0 12px; }
+  .group-title:first-child { margin-top: 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 18px 20px; display: flex; flex-direction: column; gap: 16px;
+    transition: border-color .15s;
+  }
+  .card.low { border-left: 4px solid var(--accent); padding-left: 17px; }
+  .card.dirty { border-color: var(--accent-border); }
+  .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .card h3 { margin: 0; font-size: 19px; font-weight: 600; line-height: 1.3; }
+  .meta { margin: 2px 0 0; color: var(--muted); font-size: 15px; }
+  .badge {
+    flex: none; font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-border);
+  }
+  .badge.okay { background: transparent; color: var(--ok); border-color: transparent; text-transform: none; letter-spacing: 0; font-weight: 600; padding-right: 0; }
+  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .field label { display: block; font-size: 14px; color: var(--muted); font-weight: 500; margin-bottom: 6px; }
+  .stepper { display: flex; align-items: stretch; border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; background: var(--surface); }
+  .stepper.err { border-color: var(--danger); }
+  .step { width: 44px; flex: none; border: 0; background: var(--surface-2); font-size: 22px; line-height: 1; cursor: pointer; color: var(--muted); }
+  .step:hover { color: var(--text); background: var(--border); }
+  .stepper input {
+    width: 100%; min-width: 0; border: 0; border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+    text-align: center; font-size: 24px; font-weight: 600; padding: 6px 0; background: transparent; font-variant-numeric: tabular-nums;
+    -moz-appearance: textfield;
+  }
+  .stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .stepper input:focus { outline: none; background: var(--accent-soft); }
+  .card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; }
+  .hint { color: var(--muted); font-size: 14px; }
+  .hint.err { color: var(--danger); }
+  .card-foot .btns { display: flex; gap: 6px; }
+
+  /* Order list */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 20px 22px; border-bottom: 1px solid var(--border); }
+  .panel-head h2 { margin: 0; font-size: 21px; font-weight: 700; }
+  .panel-head p { margin: 2px 0 0; color: var(--muted); font-size: 15px; }
+  .notice { margin: 0; padding: 12px 22px; background: var(--accent-soft); color: var(--accent); font-size: 15px; font-weight: 500; border-bottom: 1px solid var(--accent-border); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 14px 22px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); font-weight: 600; background: var(--surface-2); }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  td .name { font-weight: 600; }
+  td .unit { color: var(--muted); font-size: 15px; }
+  td.total { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  td.total span { font-size: 15px; font-weight: 500; color: var(--muted); margin-left: 4px; }
+  .split { display: flex; gap: 6px; flex-wrap: wrap; }
+  .split span { font-size: 14px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 3px 9px; white-space: nowrap; }
+  .split b { font-weight: 600; }
+  .sm-only { display: none; }
+  tr.cat td { background: var(--surface-2); font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; padding-top: 10px; padding-bottom: 10px; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .rule { padding: 14px 22px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--border); margin: 0; }
+
+  /* States */
+  .empty { text-align: center; padding: 56px 20px; color: var(--muted); }
+  .empty strong { display: block; color: var(--text); font-size: 20px; margin-bottom: 6px; }
+  .skeleton { background: linear-gradient(90deg, var(--surface-2), var(--border), var(--surface-2)); background-size: 200% 100%; animation: sh 1.2s infinite; border-radius: var(--radius); height: 190px; }
+  @keyframes sh { to { background-position: -200% 0; } }
+
+  /* Toast */
+  .toasts { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 50; width: max-content; max-width: calc(100vw - 32px); }
+  .toast { background: var(--text); color: var(--surface); padding: 12px 18px; border-radius: 10px; font-size: 16px; font-weight: 500; box-shadow: 0 8px 24px rgba(0,0,0,.18); animation: up .2s ease-out; }
+  .toast.err { background: var(--danger); color: #fff; }
+  @keyframes up { from { opacity: 0; transform: translateY(8px); } }
+
+  @media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 640px) {
+    .wrap { padding: 20px 16px 48px; }
+    h1 { font-size: 25px; }
+    .kpis { gap: 10px; }
+    .kpi { padding: 14px 16px; }
+    .kpi .value { font-size: 28px; }
+    .grid { grid-template-columns: 1fr; }
+    .fields { gap: 10px; }
+    th, td { padding: 12px 14px; }
+    .panel-head, .notice, .rule { padding-left: 16px; padding-right: 16px; }
+    .hide-sm { display: none; }
+    .col-split { display: none; }
+    .split.sm-only { display: flex; margin-top: 8px; }
+    td.total { font-size: 20px; }
+    .top-actions { width: 100%; }
+    .top-actions .btn { flex: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Stock tracker</h1>
+      <p class="sub" id="subline">Loading stock from Supabase…</p>
+    </div>
+    <div class="top-actions">
+      <button class="btn" id="refreshBtn" type="button">Refresh</button>
+      <button class="btn primary" id="saveAllBtn" type="button" hidden>Save all changes</button>
+    </div>
+  </header>
+
+  <section class="kpis" id="kpis" aria-label="Summary"></section>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Outlets"></nav>
+  <main id="view"></main>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+/* ---------- Config ---------- */
+const SUPABASE_URL = 'https://kmxrhrlraljwiwxcqolo.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_iIJW-UJBpPO4CDB_zSdoFg_61p9g8IT';
+const OUTLETS = ['Jurong', 'Tampines', 'Orchard'];
+const CATEGORIES = ['Milk', 'Coffee', 'Powders & syrups', 'Packaging', 'Bakery'];
+const ORDER_TAB = '__order';
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* ---------- State ---------- */
+const state = {
+  rows: [],          // saved values from Supabase
+  edits: {},         // id -> { qty, reorder } unsaved drafts (strings while typing)
+  saving: new Set(),
+  tab: 'Jurong',
+  category: 'All',
+  lowOnly: false,
+  loading: true,
+  error: null,
+};
+
+/* ---------- Helpers ---------- */
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const isLow = (qty, reorder) => qty <= reorder;
+const orderQty = (qty, reorder) => isLow(qty, reorder) ? Math.max(0, 2 * reorder - qty) : 0;
+const catIndex = c => { const i = CATEGORIES.indexOf(c); return i === -1 ? 99 : i; };
+const rowById = id => state.rows.find(r => r.id === id);
+const unitLabel = (unit, n) => n === 1 ? unit : (/(s|x|ch|sh)$/.test(unit) ? unit + 'es' : unit + 's');
+const parseCount =v => (/^\d+$/.test(String(v).trim()) ? parseInt(v, 10) : null);
+
+function draft(row) {
+  const e = state.edits[row.id];
+  return { qty: e ? e.qty : String(row.qty), reorder: e ? e.reorder : String(row.reorder) };
+}
+function draftNums(row) {
+  const d = draft(row);
+  return { qty: parseCount(d.qty), reorder: parseCount(d.reorder) };
+}
+function isDirty(row) {
+  const e = state.edits[row.id];
+  if (!e) return false;
+  return String(e.qty) !== String(row.qty) || String(e.reorder) !== String(row.reorder);
+}
+const dirtyRows = () => state.rows.filter(isDirty);
+
+function toast(msg, isErr = false) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' err' : '');
+  t.textContent = msg;
+  $('#toasts').appendChild(t);
+  setTimeout(() => t.remove(), isErr ? 5000 : 2600);
+}
+
+/* ---------- Data ---------- */
+async function load() {
+  state.loading = true; state.error = null;
+  renderAll();
+  const { data, error } = await sb
+    .from('stock_counts')
+    .select('id, qty_on_hand, reorder_level, counted_at, outlets(name), products(sku, item_name, unit, category)');
+  state.loading = false;
+  if (error) { state.error = error.message; renderAll(); return; }
+  state.rows = data.map(r => ({
+    id: r.id,
+    outlet: r.outlets.name,
+    sku: r.products.sku,
+    name: r.products.item_name,
+    unit: r.products.unit,
+    category: r.products.category,
+    qty: r.qty_on_hand,
+    reorder: r.reorder_level,
+    countedAt: r.counted_at,
+  })).sort((a, b) => catIndex(a.category) - catIndex(b.category) || a.sku.localeCompare(b.sku));
+  // drop edits for rows that no longer differ
+  for (const id of Object.keys(state.edits)) {
+    const row = rowById(Number(id));
+    if (!row || !isDirty(row)) delete state.edits[id];
+  }
+  renderAll();
+}
+
+async function saveRow(id) {
+  const row = rowById(id);
+  if (!row || state.saving.has(id)) return false;
+  const { qty, reorder } = draftNums(row);
+  if (qty === null || reorder === null) { toast('Use whole numbers of 0 or more.', true); return false; }
+  state.saving.add(id); updateCard(id);
+  const { data, error } = await sb.from('stock_counts')
+    .update({ qty_on_hand: qty, reorder_level: reorder })
+    .eq('id', id)
+    .select('id, qty_on_hand, reorder_level');
+  state.saving.delete(id);
+  if (error || !data || !data.length) {
+    updateCard(id);
+    toast(`Couldn't save ${row.name}: ${error ? error.message : 'permission denied'}`, true);
+    return false;
+  }
+  row.qty = data[0].qty_on_hand;
+  row.reorder = data[0].reorder_level;
+  delete state.edits[id];
+  updateCard(id); renderKpis(); renderTabs(); renderSaveAll();
+  return true;
+}
+
+async function saveAll() {
+  const rows = dirtyRows();
+  let ok = 0;
+  for (const r of rows) if (await saveRow(r.id)) ok++;
+  if (ok) toast(`Saved ${ok} item${ok === 1 ? '' : 's'}`);
+}
+
+/* ---------- Derived ---------- */
+function outletStats(outlet) {
+  const rows = state.rows.filter(r => r.outlet === outlet);
+  const low = rows.filter(r => isLow(r.qty, r.reorder));
+  return { total: rows.length, low: low.length, units: low.reduce((s, r) => s + orderQty(r.qty, r.reorder), 0) };
+}
+function orderLines() {
+  const map = new Map();
+  for (const r of state.rows) {
+    const q = orderQty(r.qty, r.reorder);
+    if (!q) continue;
+    if (!map.has(r.sku)) map.set(r.sku, { sku: r.sku, name: r.name, unit: r.unit, category: r.category, total: 0, by: {} });
+    const line = map.get(r.sku);
+    line.total += q;
+    line.by[r.outlet] = (line.by[r.outlet] || 0) + q;
+  }
+  return [...map.values()].sort((a, b) => catIndex(a.category) - catIndex(b.category) || a.sku.localeCompare(b.sku));
+}
+
+/* ---------- Render ---------- */
+function renderAll() {
+  renderSub(); renderKpis(); renderTabs(); renderView(); renderSaveAll();
+}
+
+function renderSub() {
+  const el = $('#subline');
+  if (state.loading) { el.textContent = 'Loading stock from Supabase…'; return; }
+  if (state.error) { el.textContent = 'Could not reach Supabase'; return; }
+  const dates = [...new Set(state.rows.map(r => r.countedAt))].sort();
+  const last = dates[dates.length - 1];
+  const fmt = last ? new Date(last + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+  el.textContent = `${OUTLETS.length} outlets · ${new Set(state.rows.map(r => r.sku)).size} items · last count ${fmt}`;
+}
+
+function renderKpis() {
+  const el = $('#kpis');
+  if (state.loading || state.error) { el.innerHTML = ''; return; }
+  const lines = orderLines();
+  const units = lines.reduce((s, l) => s + l.total, 0);
+  el.innerHTML = OUTLETS.map(o => {
+    const s = outletStats(o);
+    return `<button class="kpi${state.tab === o ? ' active' : ''}" type="button" data-tab="${esc(o)}">
+      <div class="label">${esc(o)}</div>
+      <div class="value${s.low ? ' warn' : ''}">${s.low}<small>low of ${s.total}</small></div>
+      <div class="foot">${s.units} units to order</div>
+    </button>`;
+  }).join('') + `<button class="kpi${state.tab === ORDER_TAB ? ' active' : ''}" type="button" data-tab="${ORDER_TAB}">
+      <div class="label">Supplier order</div>
+      <div class="value">${lines.length}<small>items</small></div>
+      <div class="foot">${units} units across all outlets</div>
+    </button>`;
+}
+
+function renderTabs() {
+  const el = $('#tabs');
+  const lines = orderLines().length;
+  el.innerHTML = OUTLETS.map(o => {
+    const s = state.rows.length ? outletStats(o) : null;
+    return `<button class="tab" role="tab" type="button" data-tab="${esc(o)}" aria-selected="${state.tab === o}">
+      ${esc(o)}${s ? ` <span class="pill${s.low ? ' hot' : ''}">${s.low} low</span>` : ''}
+    </button>`;
+  }).join('') + `<button class="tab" role="tab" type="button" data-tab="${ORDER_TAB}" aria-selected="${state.tab === ORDER_TAB}">
+      Order from suppliers ${state.rows.length ? `<span class="pill${lines ? ' hot' : ''}">${lines}</span>` : ''}
+    </button>`;
+}
+
+function renderSaveAll() {
+  const btn = $('#saveAllBtn');
+  const n = dirtyRows().length;
+  btn.hidden = n === 0;
+  btn.textContent = `Save all changes (${n})`;
+}
+
+function renderView() {
+  const el = $('#view');
+  if (state.loading) {
+    el.innerHTML = `<div class="grid">${'<div class="skeleton"></div>'.repeat(6)}</div>`;
+    return;
+  }
+  if (state.error) {
+    el.innerHTML = `<div class="panel empty"><strong>Couldn't load stock</strong>${esc(state.error)}<br><br>
+      <button class="btn primary" type="button" data-act="retry">Try again</button></div>`;
+    return;
+  }
+  if (state.tab === ORDER_TAB) { renderOrder(el); return; }
+  renderOutlet(el);
+}
+
+function renderOutlet(el) {
+  const all = state.rows.filter(r => r.outlet === state.tab);
+  const counts = { All: all.length };
+  CATEGORIES.forEach(c => counts[c] = all.filter(r => r.category === c).length);
+  let rows = all.filter(r => state.category === 'All' || r.category === state.category);
+  if (state.lowOnly) rows = rows.filter(r => isLow(r.qty, r.reorder));
+
+  const chips = ['All', ...CATEGORIES].map(c =>
+    `<button class="chip" type="button" data-cat="${esc(c)}" aria-pressed="${state.category === c}">${esc(c)} <span class="hide-sm">· ${counts[c]}</span></button>`
+  ).join('');
+
+  let body;
+  if (!rows.length) {
+    body = `<div class="panel empty"><strong>Nothing to show</strong>${state.lowOnly ? 'No low items in this view.' : 'No items in this category.'}</div>`;
+  } else {
+    const groups = CATEGORIES.map(c => [c, rows.filter(r => r.category === c)]).filter(([, rs]) => rs.length);
+    body = groups.map(([c, rs]) =>
+      `<h2 class="group-title">${esc(c)}</h2><div class="grid">${rs.map(cardHTML).join('')}</div>`
+    ).join('');
+  }
+
+  el.innerHTML = `
+    <div class="toolbar">
+      <div class="chips" role="group" aria-label="Category">${chips}</div>
+      <div class="toolbar-right">
+        <label class="toggle"><input type="checkbox" id="lowOnly" ${state.lowOnly ? 'checked' : ''}> Low items only</label>
+      </div>
+    </div>
+    <div id="cards">${body}</div>`;
+}
+
+function cardClasses(row) {
+  const n = draftNums(row);
+  const low = n.qty !== null && n.reorder !== null ? isLow(n.qty, n.reorder) : isLow(row.qty, row.reorder);
+  return 'card' + (low ? ' low' : '') + (isDirty(row) ? ' dirty' : '');
+}
+
+function cardHTML(row) {
+  return `<article class="${cardClasses(row)}" data-id="${row.id}">${cardInner(row)}</article>`;
+}
+
+function cardInner(row) {
+  const d = draft(row);
+  const n = draftNums(row);
+  const valid = n.qty !== null && n.reorder !== null;
+  const low = valid ? isLow(n.qty, n.reorder) : isLow(row.qty, row.reorder);
+  const dirty = isDirty(row);
+  const saving = state.saving.has(row.id);
+  let hint = '';
+  if (!valid) hint = `<span class="hint err">Whole numbers, 0 or more</span>`;
+  else if (saving) hint = `<span class="hint">Saving…</span>`;
+  else if (dirty) hint = `<span class="hint">Unsaved · was ${row.qty} / ${row.reorder}</span>`;
+  else if (low) hint = `<span class="hint">Order ${orderQty(row.qty, row.reorder)} ${esc(unitLabel(row.unit, orderQty(row.qty, row.reorder)))}</span>`;
+  else hint = `<span class="hint">&nbsp;</span>`;
+
+  return `
+    <div class="card-head">
+      <div>
+        <h3>${esc(row.name)}</h3>
+        <p class="meta">${esc(row.unit)} · ${esc(row.sku)}</p>
+      </div>
+      ${low ? '<span class="badge">Low</span>' : '<span class="badge okay">OK</span>'}
+    </div>
+    <div class="fields">
+      ${stepper(row, 'qty', 'On hand', d.qty, n.qty === null)}
+      ${stepper(row, 'reorder', 'Reorder at', d.reorder, n.reorder === null)}
+    </div>
+    <div class="card-foot">
+      ${hint}
+      <div class="btns">
+        ${dirty ? `<button class="btn ghost" type="button" data-act="undo" ${saving ? 'disabled' : ''}>Undo</button>` : ''}
+        <button class="btn primary" type="button" data-act="save" ${dirty && valid && !saving ? '' : 'disabled'}>Save</button>
+      </div>
+    </div>`;
+}
+
+function stepper(row, field, label, value, err) {
+  const id = `f-${row.id}-${field}`;
+  return `<div class="field">
+    <label for="${id}">${label}</label>
+    <div class="stepper${err ? ' err' : ''}">
+      <button class="step" type="button" data-act="dec" data-field="${field}" aria-label="Decrease ${label.toLowerCase()}">−</button>
+      <input id="${id}" type="number" inputmode="numeric" min="0" step="1" value="${esc(value)}" data-field="${field}">
+      <button class="step" type="button" data-act="inc" data-field="${field}" aria-label="Increase ${label.toLowerCase()}">+</button>
+    </div>
+  </div>`;
+}
+
+function updateCard(id) {
+  const card = document.querySelector(`.card[data-id="${id}"]`);
+  if (!card) return;
+  const row = rowById(id);
+  const active = document.activeElement;
+  const focusField = active && card.contains(active) && active.dataset.field && active.tagName === 'INPUT' ? active.dataset.field : null;
+  const caret = focusField ? active.selectionStart : null;
+  card.innerHTML = cardInner(row);
+  card.className = cardClasses(row);
+  if (focusField) {
+    const inp = card.querySelector(`input[data-field="${focusField}"]`);
+    inp.focus();
+    try { if (caret !== null) inp.setSelectionRange(caret, caret); } catch (_) {}
+  }
+}
+
+function renderOrder(el) {
+  const lines = orderLines();
+  const pending = dirtyRows().length;
+  const today = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  let rowsHTML = '';
+  let lastCat = null;
+  for (const l of lines) {
+    if (l.category !== lastCat) {
+      rowsHTML += `<tr class="cat"><td colspan="3">${esc(l.category)}</td></tr>`;
+      lastCat = l.category;
+    }
+    const split = OUTLETS.filter(o => l.by[o]).map(o => `<span>${esc(o)} <b>${l.by[o]}</b></span>`).join('');
+    rowsHTML += `<tr>
+      <td><div class="name">${esc(l.name)}</div><div class="unit">${esc(l.sku)}</div><div class="split sm-only">${split}</div></td>
+      <td class="col-split"><div class="split">${split}</div></td>
+      <td class="num total">${l.total}<span>${esc(unitLabel(l.unit, l.total))}</span></td>
+    </tr>`;
+  }
+  el.innerHTML = `
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Order from suppliers</h2>
+          <p>${lines.length} items · ${lines.reduce((s, l) => s + l.total, 0)} units · ${today}</p>
+        </div>
+        <button class="btn primary" type="button" data-act="copy" ${lines.length ? '' : 'disabled'}>Copy order list</button>
+      </div>
+      ${pending ? `<p class="notice">${pending} unsaved change${pending === 1 ? '' : 's'} not included. Save them to update this list.</p>` : ''}
+      ${lines.length ? `<table>
+        <thead><tr><th>Item</th><th class="col-split">By outlet</th><th class="num">Total</th></tr></thead>
+        <tbody>${rowsHTML}</tbody>
+      </table>` : `<div class="empty"><strong>Nothing to order</strong>Every item is above its reorder level at all outlets.</div>`}
+      <p class="rule">Items at or below their reorder level are topped up to 2× the reorder level.</p>
+    </section>`;
+}
+
+function orderText() {
+  const lines = orderLines();
+  const today = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  const out = [`Supplier order — ${today}`, ''];
+  let lastCat = null;
+  for (const l of lines) {
+    if (l.category !== lastCat) { if (lastCat !== null) out.push(''); out.push(l.category.toUpperCase()); lastCat = l.category; }
+    const split = OUTLETS.filter(o => l.by[o]).map(o => `${o} ${l.by[o]}`).join(', ');
+    out.push(`- ${l.name} — ${l.total} ${unitLabel(l.unit, l.total)} (${split})`);
+  }
+  return out.join('\n');
+}
+
+async function copyOrder() {
+  const text = orderText();
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_) {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    if (!ok) { toast('Copy failed. Select the table and copy it by hand.', true); return; }
+  }
+  toast('Order list copied');
+}
+
+/* ---------- Events ---------- */
+function setTab(tab) {
+  if (state.tab === tab) return;
+  state.tab = tab;
+  renderKpis(); renderTabs(); renderView();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+document.addEventListener('click', e => {
+  const tabBtn = e.target.closest('[data-tab]');
+  if (tabBtn) { setTab(tabBtn.dataset.tab); return; }
+
+  const chip = e.target.closest('[data-cat]');
+  if (chip) { state.category = chip.dataset.cat; renderView(); return; }
+
+  const act = e.target.closest('[data-act]');
+  if (!act) return;
+  const a = act.dataset.act;
+  if (a === 'retry') { load(); return; }
+  if (a === 'copy') { copyOrder(); return; }
+
+  const card = act.closest('.card');
+  if (!card) return;
+  const id = Number(card.dataset.id);
+  const row = rowById(id);
+  if (a === 'save') {
+    saveRow(id).then(ok => ok && toast(`Saved ${row.name} · ${row.outlet}`));
+  } else if (a === 'undo') {
+    delete state.edits[id]; updateCard(id); renderSaveAll();
+  } else if (a === 'inc' || a === 'dec') {
+    const field = act.dataset.field;
+    const d = draft(row);
+    const cur = parseCount(d[field]) ?? (field === 'qty' ? row.qty : row.reorder);
+    const next = Math.max(0, cur + (a === 'inc' ? 1 : -1));
+    state.edits[id] = { ...d, [field]: String(next) };
+    if (!isDirty(row)) delete state.edits[id];
+    updateCard(id); renderSaveAll();
+  }
+});
+
+document.addEventListener('input', e => {
+  const inp = e.target;
+  if (inp.id === 'lowOnly') { state.lowOnly = inp.checked; renderView(); return; }
+  if (!inp.dataset.field) return;
+  const card = inp.closest('.card');
+  const id = Number(card.dataset.id);
+  const row = rowById(id);
+  state.edits[id] = { ...draft(row), [inp.dataset.field]: inp.value };
+  if (!isDirty(row)) delete state.edits[id];
+  updateCard(id); renderSaveAll();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.dataset && e.target.dataset.field) {
+    const card = e.target.closest('.card');
+    const id = Number(card.dataset.id);
+    const row = rowById(id);
+    if (isDirty(row)) saveRow(id).then(ok => ok && toast(`Saved ${row.name} · ${row.outlet}`));
+  }
+});
+
+$('#refreshBtn').addEventListener('click', () => {
+  if (dirtyRows().length && !confirm('Refresh and keep your unsaved changes on top of the latest numbers?')) return;
+  load();
+});
+$('#saveAllBtn').addEventListener('click', saveAll);
+
+window.addEventListener('beforeunload', e => {
+  if (dirtyRows().length) { e.preventDefault(); e.returnValue = ''; }
+});
+
+load();
+</script>
+</body>
+</html>
