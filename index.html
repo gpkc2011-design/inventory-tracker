@@ -177,6 +177,40 @@
   .toast.err { background: var(--danger); color: #fff; }
   @keyframes up { from { opacity: 0; transform: translateY(8px); } }
 
+  /* Auth */
+  .user-menu { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .user-chip { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 16px; padding: 0 6px; }
+  .user-chip .role { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
+  .user-chip .role.admin { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
+  .auth-wrap { display: flex; justify-content: center; padding: 32px 0 48px; }
+  .card.auth-card { width: 100%; max-width: 420px; padding: 28px; gap: 18px; }
+  .auth-card h2 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+  .auth-card p.lead { margin: 4px 0 0; color: var(--muted); font-size: 16px; }
+  .form-field { display: flex; flex-direction: column; gap: 6px; }
+  .form-field label { font-size: 15px; font-weight: 600; }
+  .form-field .help { font-size: 14px; color: var(--muted); }
+  .text-input, .select-input {
+    width: 100%; min-height: 48px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: 10px;
+    background: var(--surface); font-size: 17px;
+  }
+  .text-input:focus, .select-input:focus { outline: 3px solid var(--accent-border); outline-offset: 0; border-color: var(--accent); }
+  .form-error { margin: 0; color: var(--danger); font-size: 15px; font-weight: 500; min-height: 1em; }
+  .form-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .form-actions .btn { flex: 1; }
+
+  /* Users admin */
+  .users-grid { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .users-grid .card.add-user { gap: 14px; }
+  .users-grid .card h3 { font-size: 19px; }
+  .status { font-size: 13px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+  .status.pending { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-border); }
+  .status.active { color: var(--ok); border: 1px solid var(--border); }
+  .row-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+  .row-actions .btn { min-height: 36px; padding: 0 12px; font-size: 14px; }
+  .select-input.compact { min-height: 36px; font-size: 15px; width: auto; padding: 0 8px; }
+  .you { font-size: 13px; color: var(--muted); font-weight: 500; }
+  @media (max-width: 900px) { .users-grid { grid-template-columns: 1fr; } }
+
   /* Pointer effects */
   #fxCanvas { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 40; }
   .card, .kpi { transform-origin: 50% 50%; backface-visibility: hidden; }
@@ -207,18 +241,26 @@
   <header class="top">
     <div>
       <h1>Stock tracker</h1>
-      <p class="sub" id="subline">Loading stock from Supabase…</p>
+      <p class="sub" id="subline">Checking sign-in…</p>
     </div>
     <div class="top-actions">
       <button class="btn fx-toggle" id="fxBtn" type="button" aria-pressed="true">Effects on</button>
-      <button class="btn" id="refreshBtn" type="button">Refresh</button>
+      <button class="btn" id="refreshBtn" type="button" hidden>Refresh</button>
       <button class="btn primary" id="saveAllBtn" type="button" hidden>Save all changes</button>
+      <div class="user-menu" id="userMenu" hidden>
+        <span class="user-chip" id="userChip"></span>
+        <button class="btn ghost" id="changePwBtn" type="button">Change password</button>
+        <button class="btn" id="signOutBtn" type="button">Sign out</button>
+      </div>
     </div>
   </header>
 
-  <section class="kpis" id="kpis" aria-label="Summary"></section>
-  <nav class="tabs" id="tabs" role="tablist" aria-label="Outlets"></nav>
-  <main id="view"></main>
+  <section id="authView" hidden></section>
+  <div id="appView" hidden>
+    <section class="kpis" id="kpis" aria-label="Summary"></section>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Outlets"></nav>
+    <main id="view"></main>
+  </div>
 </div>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 <canvas id="fxCanvas" aria-hidden="true"></canvas>
@@ -231,6 +273,9 @@ const SUPABASE_KEY = 'sb_publishable_iIJW-UJBpPO4CDB_zSdoFg_61p9g8IT';
 const OUTLETS = ['Jurong', 'Tampines', 'Orchard'];
 const CATEGORIES = ['Milk', 'Coffee', 'Powders & syrups', 'Packaging', 'Bakery'];
 const ORDER_TAB = '__order';
+const USERS_TAB = '__users';
+const LOGIN_DOMAIN = 'stock-tracker.app';   // usernames map to <username>@stock-tracker.app in Supabase Auth
+const DEFAULT_PASSWORD = 'password';
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -244,7 +289,12 @@ const state = {
   lowOnly: false,
   loading: true,
   error: null,
+  session: null,     // Supabase Auth session
+  profile: null,     // row from public.profiles
+  users: null,       // admin: list from the admin-users function
+  usersError: null,
 };
+const isAdmin = () => state.profile?.role === 'admin';
 
 /* ---------- Helpers ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -287,7 +337,9 @@ async function load() {
     .from('stock_counts')
     .select('id, qty_on_hand, reorder_level, counted_at, outlets(name), products(sku, item_name, unit, category)');
   state.loading = false;
+  if (error && /jwt|token|auth/i.test(error.message)) { await sb.auth.signOut(); showLogin('Your session expired. Please sign in again.'); return; }
   if (error) { state.error = error.message; renderAll(); return; }
+  if (!data.length) { state.error = 'No stock is visible to this account. Ask an admin to check your access.'; renderAll(); return; }
   state.rows = data.map(r => ({
     id: r.id,
     outlet: r.outlets.name,
@@ -356,6 +408,353 @@ function orderLines() {
   return [...map.values()].sort((a, b) => catIndex(a.category) - catIndex(b.category) || a.sku.localeCompare(b.sku));
 }
 
+/* ---------- Auth ---------- */
+const toEmail = username => `${username.trim().toLowerCase()}@${LOGIN_DOMAIN}`;
+
+function showOnly(view) {
+  $('#authView').hidden = view !== 'auth';
+  $('#appView').hidden = view !== 'app';
+  const signedIn = view === 'app';
+  $('#refreshBtn').hidden = !signedIn;
+  $('#userMenu').hidden = !(state.session && state.profile);
+  if (!signedIn) $('#saveAllBtn').hidden = true;
+  $('#changePwBtn').hidden = view !== 'app';
+}
+
+function renderUserChip() {
+  const p = state.profile;
+  $('#userChip').innerHTML = p
+    ? `${esc(p.display_name)} <span class="role${p.role === 'admin' ? ' admin' : ''}">${esc(p.role)}</span>`
+    : '';
+}
+
+function showLogin(message = '') {
+  state.session = null; state.profile = null; state.users = null;
+  state.rows = []; state.edits = {}; state.loading = true;
+  if (state.tab === USERS_TAB) state.tab = OUTLETS[0];
+  $('#subline').textContent = 'Sign in to continue';
+  $('#authView').innerHTML = `
+    <div class="auth-wrap">
+      <form class="card auth-card" id="loginForm" novalidate>
+        <div>
+          <h2>Sign in</h2>
+          <p class="lead">Use the username and password your manager gave you.</p>
+        </div>
+        <div class="form-field">
+          <label for="loginUser">Username</label>
+          <input class="text-input" id="loginUser" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+        </div>
+        <div class="form-field">
+          <label for="loginPw">Password</label>
+          <input class="text-input" id="loginPw" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <p class="form-error" id="loginError" role="alert">${esc(message)}</p>
+        <div class="form-actions"><button class="btn primary" type="submit">Sign in</button></div>
+      </form>
+    </div>`;
+  showOnly('auth');
+  setTimeout(() => $('#loginUser')?.focus(), 0);
+}
+
+function showChangePassword(forced) {
+  $('#subline').textContent = forced ? 'Set your own password to continue' : 'Change your password';
+  $('#authView').innerHTML = `
+    <div class="auth-wrap">
+      <form class="card auth-card" id="pwForm" novalidate data-forced="${forced ? '1' : ''}">
+        <div>
+          <h2>${forced ? `Welcome, ${esc(state.profile.display_name)}` : 'Change password'}</h2>
+          <p class="lead">${forced ? 'Before you start, replace your starting password with one only you know.' : 'Choose a new password for your account.'}</p>
+        </div>
+        <div class="form-field">
+          <label for="newPw">New password</label>
+          <input class="text-input" id="newPw" type="password" autocomplete="new-password" minlength="8" required>
+          <span class="help">At least 8 characters, and not “${DEFAULT_PASSWORD}”.</span>
+        </div>
+        <div class="form-field">
+          <label for="newPw2">Confirm new password</label>
+          <input class="text-input" id="newPw2" type="password" autocomplete="new-password" minlength="8" required>
+        </div>
+        <p class="form-error" id="pwError" role="alert"></p>
+        <div class="form-actions">
+          ${forced ? '' : `<button class="btn ghost" type="button" data-auth="cancel-pw">Cancel</button>`}
+          <button class="btn primary" type="submit">Save password</button>
+        </div>
+      </form>
+    </div>`;
+  showOnly('auth');
+  setTimeout(() => $('#newPw')?.focus(), 0);
+}
+
+function showApp() {
+  renderUserChip();
+  showOnly('app');
+  if (!state.rows.length) load(); else renderAll();
+  if (isAdmin() && !state.users) loadUsers();
+}
+
+async function fetchProfile(userId) {
+  const { data, error } = await sb.from('profiles')
+    .select('id, username, display_name, role, must_change_password')
+    .eq('id', userId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function enterWithSession(session) {
+  if (!session) { showLogin(); return; }
+  state.session = session;
+  try {
+    state.profile = await fetchProfile(session.user.id);
+  } catch (e) {
+    await sb.auth.signOut();
+    showLogin(`Couldn't load your profile: ${e.message}`);
+    return;
+  }
+  if (!state.profile) {
+    await sb.auth.signOut();
+    showLogin('This account has no profile. Ask an admin to check it.');
+    return;
+  }
+  renderUserChip();
+  if (state.profile.must_change_password) showChangePassword(true);
+  else showApp();
+}
+
+async function handleLogin(form) {
+  const username = form.username.value.trim().toLowerCase();
+  const password = form.password.value;
+  const errEl = $('#loginError');
+  if (!username || !password) { errEl.textContent = 'Enter your username and password.'; return; }
+  const btn = form.querySelector('[type="submit"]');
+  btn.disabled = true; btn.textContent = 'Signing in…'; errEl.textContent = '';
+  const { data, error } = await sb.auth.signInWithPassword({ email: toEmail(username), password });
+  btn.disabled = false; btn.textContent = 'Sign in';
+  if (error) {
+    errEl.textContent = /invalid/i.test(error.message) ? 'Wrong username or password.' : error.message;
+    form.password.value = ''; form.password.focus();
+    return;
+  }
+  await enterWithSession(data.session);
+}
+
+async function handlePasswordChange(form) {
+  const forced = form.dataset.forced === '1';
+  const pw = $('#newPw').value, pw2 = $('#newPw2').value;
+  const errEl = $('#pwError');
+  if (pw.length < 8) { errEl.textContent = 'Use at least 8 characters.'; return; }
+  if (pw.toLowerCase() === DEFAULT_PASSWORD) { errEl.textContent = `Choose something other than “${DEFAULT_PASSWORD}”.`; return; }
+  if (pw !== pw2) { errEl.textContent = 'The two passwords don’t match.'; return; }
+  const btn = form.querySelector('[type="submit"]');
+  btn.disabled = true; btn.textContent = 'Saving…'; errEl.textContent = '';
+  const { error } = await sb.auth.updateUser({ password: pw });
+  if (error) {
+    btn.disabled = false; btn.textContent = 'Save password';
+    errEl.textContent = /same|different/i.test(error.message) ? 'That’s your current password — choose a new one.' : error.message;
+    return;
+  }
+  if (state.profile.must_change_password) {
+    const { error: rpcErr } = await sb.rpc('complete_password_change');
+    if (rpcErr) { btn.disabled = false; btn.textContent = 'Save password'; errEl.textContent = rpcErr.message; return; }
+    state.profile.must_change_password = false;
+  }
+  toast('Password updated');
+  showApp();
+}
+
+async function signOut() {
+  if (dirtyRows().length && !confirm('You have unsaved stock changes. Sign out and discard them?')) return;
+  state.edits = {};
+  await sb.auth.signOut();
+  showLogin();
+  toast('Signed out');
+}
+
+/* ---------- Users (admin) ---------- */
+async function callAdmin(action, payload = {}) {
+  const { data, error } = await sb.functions.invoke('admin-users', { body: { action, ...payload } });
+  if (error) {
+    let msg = error.message;
+    try { const body = await error.context.json(); if (body?.error) msg = body.error; } catch (_) {}
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
+async function loadUsers() {
+  state.usersError = null;
+  try {
+    const { users } = await callAdmin('list');
+    state.users = users;
+  } catch (e) {
+    state.usersError = e.message;
+  }
+  renderTabs();
+  if (state.tab === USERS_TAB) renderView();
+}
+
+const fmtWhen = iso => iso
+  ? new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+  : 'Never';
+
+function renderUsers(el) {
+  const me = state.profile.id;
+  let list;
+  if (state.usersError) {
+    list = `<div class="empty"><strong>Couldn't load users</strong>${esc(state.usersError)}<br><br>
+      <button class="btn" type="button" data-uact="reload">Try again</button></div>`;
+  } else if (!state.users) {
+    list = `<div class="empty">Loading users…</div>`;
+  } else {
+    list = `<table>
+      <thead><tr><th>User</th><th class="hide-sm">Role</th><th class="hide-sm">Last sign-in</th><th class="num">Actions</th></tr></thead>
+      <tbody>${state.users.map(u => `<tr data-user="${esc(u.id)}">
+        <td>
+          <div class="name">${esc(u.display_name)} ${u.id === me ? '<span class="you">(you)</span>' : ''}</div>
+          <div class="unit">${esc(u.username)}</div>
+          <div style="margin-top:6px">${u.must_change_password
+            ? '<span class="status pending">Must set password</span>'
+            : '<span class="status active">Active</span>'}</div>
+        </td>
+        <td class="hide-sm">
+          <select class="select-input compact" data-uact="role" aria-label="Role for ${esc(u.username)}" ${u.id === me ? 'disabled' : ''}>
+            <option value="staff" ${u.role === 'staff' ? 'selected' : ''}>Staff</option>
+            <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+          </select>
+        </td>
+        <td class="hide-sm">${esc(fmtWhen(u.last_sign_in_at))}</td>
+        <td class="num"><div class="row-actions">
+          <button class="btn" type="button" data-uact="reset">Reset password</button>
+          ${u.id === me ? '' : '<button class="btn ghost" type="button" data-uact="delete">Remove</button>'}
+        </div></td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  }
+
+  el.innerHTML = `
+    <div class="users-grid">
+      <form class="card add-user" id="addUserForm" novalidate>
+        <div>
+          <h3>Add a user</h3>
+          <p class="meta">They sign in with this username and must choose their own password the first time.</p>
+        </div>
+        <div class="form-field">
+          <label for="nuUser">Username</label>
+          <input class="text-input" id="nuUser" autocapitalize="none" spellcheck="false" placeholder="e.g. aisha" required>
+        </div>
+        <div class="form-field">
+          <label for="nuName">Display name <span class="help">(optional)</span></label>
+          <input class="text-input" id="nuName" placeholder="e.g. Aisha Tan">
+        </div>
+        <div class="form-field">
+          <label for="nuPw">Starting password</label>
+          <input class="text-input" id="nuPw" value="${DEFAULT_PASSWORD}" required>
+          <span class="help">At least 8 characters. Share it with them privately.</span>
+        </div>
+        <div class="form-field">
+          <label for="nuRole">Role</label>
+          <select class="select-input" id="nuRole">
+            <option value="staff" selected>Staff: view and update stock</option>
+            <option value="admin">Admin: also manage users</option>
+          </select>
+        </div>
+        <p class="form-error" id="nuError" role="alert"></p>
+        <div class="form-actions"><button class="btn primary" type="submit">Add user</button></div>
+      </form>
+      <section class="panel">
+        <div class="panel-head">
+          <div><h2>Users</h2><p>${state.users ? `${state.users.length} accounts` : '&nbsp;'}</p></div>
+          <button class="btn" type="button" data-uact="reload">Refresh</button>
+        </div>
+        ${list}
+      </section>
+    </div>`;
+}
+
+async function handleAddUser(form) {
+  const username = $('#nuUser').value.trim().toLowerCase();
+  const display_name = $('#nuName').value.trim();
+  const password = $('#nuPw').value;
+  const role = $('#nuRole').value;
+  const errEl = $('#nuError');
+  if (!/^[a-z0-9][a-z0-9._-]{1,30}$/.test(username)) { errEl.textContent = 'Username: 2–31 lowercase letters, numbers, . _ or -'; return; }
+  if (password.length < 8) { errEl.textContent = 'Starting password must be at least 8 characters.'; return; }
+  const btn = form.querySelector('[type="submit"]');
+  btn.disabled = true; btn.textContent = 'Adding…'; errEl.textContent = '';
+  try {
+    await callAdmin('create', { username, display_name, password, role });
+    toast(`Added ${username}`);
+    state.users = null; renderView();
+    await loadUsers();
+  } catch (e) {
+    errEl.textContent = e.message;
+    btn.disabled = false; btn.textContent = 'Add user';
+  }
+}
+
+document.addEventListener('submit', e => {
+  const form = e.target;
+  if (!['loginForm', 'pwForm', 'addUserForm'].includes(form.id)) return;
+  e.preventDefault();
+  if (form.id === 'loginForm') handleLogin(form);
+  else if (form.id === 'pwForm') handlePasswordChange(form);
+  else handleAddUser(form);
+});
+
+document.addEventListener('click', async e => {
+  const authBtn = e.target.closest('[data-auth]');
+  if (authBtn) {
+    if (authBtn.dataset.auth === 'signout') signOut();
+    if (authBtn.dataset.auth === 'cancel-pw') showApp();
+    return;
+  }
+  const u = e.target.closest('[data-uact]');
+  if (!u || u.tagName === 'SELECT') return;
+  if (u.dataset.uact === 'reload') { state.users = null; renderView(); loadUsers(); return; }
+  const row = u.closest('[data-user]');
+  const user = row && state.users?.find(x => x.id === row.dataset.user);
+  if (!user) return;
+  try {
+    if (u.dataset.uact === 'reset') {
+      const pw = prompt(`Temporary password for ${user.username}? They'll have to change it when they next sign in.`, DEFAULT_PASSWORD);
+      if (pw === null) return;
+      if (pw.length < 8) { toast('Use at least 8 characters.', true); return; }
+      u.disabled = true;
+      await callAdmin('reset_password', { user_id: user.id, password: pw });
+      toast(`Password reset for ${user.username}`);
+    } else if (u.dataset.uact === 'delete') {
+      if (!confirm(`Remove ${user.display_name} (${user.username})? They will no longer be able to sign in. This can't be undone.`)) return;
+      u.disabled = true;
+      await callAdmin('delete', { user_id: user.id });
+      toast(`Removed ${user.username}`);
+    }
+    await loadUsers();
+  } catch (err) {
+    u.disabled = false;
+    toast(err.message, true);
+  }
+});
+
+document.addEventListener('change', async e => {
+  const sel = e.target.closest('select[data-uact="role"]');
+  if (!sel) return;
+  const row = sel.closest('[data-user]');
+  const user = state.users?.find(x => x.id === row.dataset.user);
+  if (!user) return;
+  sel.disabled = true;
+  try {
+    await callAdmin('set_role', { user_id: user.id, role: sel.value });
+    toast(`${user.display_name} is now ${sel.value}`);
+    await loadUsers();
+  } catch (err) {
+    sel.value = user.role; sel.disabled = false;
+    toast(err.message, true);
+  }
+});
+
+$('#signOutBtn').addEventListener('click', signOut);
+$('#changePwBtn').addEventListener('click', () => showChangePassword(false));
+
 /* ---------- Render ---------- */
 function renderAll() {
   renderSub(); renderKpis(); renderTabs(); renderView(); renderSaveAll();
@@ -400,7 +799,9 @@ function renderTabs() {
     </button>`;
   }).join('') + `<button class="tab" role="tab" type="button" data-tab="${ORDER_TAB}" aria-selected="${state.tab === ORDER_TAB}">
       Order from suppliers ${state.rows.length ? `<span class="pill${lines ? ' hot' : ''}">${lines}</span>` : ''}
-    </button>`;
+    </button>` + (isAdmin() ? `<button class="tab" role="tab" type="button" data-tab="${USERS_TAB}" aria-selected="${state.tab === USERS_TAB}">
+      Users ${state.users ? `<span class="pill">${state.users.length}</span>` : ''}
+    </button>` : '');
 }
 
 function renderSaveAll() {
@@ -412,6 +813,7 @@ function renderSaveAll() {
 
 function renderView() {
   const el = $('#view');
+  if (state.tab === USERS_TAB && isAdmin()) { renderUsers(el); return; }
   if (state.loading) {
     el.innerHTML = `<div class="grid">${'<div class="skeleton"></div>'.repeat(6)}</div>`;
     return;
@@ -882,7 +1284,19 @@ const fx = (() => {
   return { spawn };
 })();
 
-load();
+/* ---------- Start ---------- */
+(async function boot() {
+  $('#subline').textContent = 'Checking sign-in…';
+  const { data } = await sb.auth.getSession();
+  await enterWithSession(data.session);
+  sb.auth.onAuthStateChange((event, session) => {
+    // Defer: Supabase recommends not awaiting other Supabase calls inside this callback
+    setTimeout(() => {
+      if (event === 'SIGNED_OUT' && state.session) showLogin('You were signed out.');
+      else if (session) state.session = session;
+    }, 0);
+  });
+})();
 </script>
 </body>
 </html>
